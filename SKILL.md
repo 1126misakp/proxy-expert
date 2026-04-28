@@ -109,32 +109,82 @@ ls -la {SSH_KEY_PATH}
 存在则直接进入 Step 4。不存在则提示用户检查路径。
 
 ### 如果 SSH_AUTH=password
-密码认证无法在 Bash 工具中非交互式使用（sshpass 在 Mac/Windows 均需额外安装且不稳定）。策略：生成一次性密钥，引导用户一次性手动添加，之后全程自动化。
+策略：生成一次性密钥，**全自动**通过密码登录把公钥注入 VPS，用户无需进 VPS 终端手动操作。
 
 1. 生成临时密钥对：
 ```bash
 ssh-keygen -t ed25519 -f ~/.ssh/proxy_expert_ed25519 -N "" -C "proxy-expert-auto"
 ```
 
-2. 显示公钥内容，让用户看到：
-```bash
-cat ~/.ssh/proxy_expert_ed25519.pub
-```
+2. 自动注入公钥（三种方式按优先级尝试）：
 
-3. 给用户精确指令（让他用密码登录 VPS 执行）：
+**方式 A：sshpass（最快，优先）**
 ```bash
-# 用户在 VPS 上执行（把下面的公钥替换成实际内容）：
-mkdir -p ~/.ssh && chmod 700 ~/.ssh
-echo "公钥内容粘贴到这里" >> ~/.ssh/authorized_keys
-chmod 600 ~/.ssh/authorized_keys
+# 检查 sshpass 是否可用
+which sshpass || echo "NOT_FOUND"
 ```
+- 如果可用：
+```bash
+sshpass -p "{SSH_PASSWORD}" ssh-copy-id \
+  -i ~/.ssh/proxy_expert_ed25519.pub \
+  -p {SSH_PORT} \
+  -o StrictHostKeyChecking=no \
+  {SSH_USER}@{VPS_IP}
+```
+- 如果不可用：
+  - Mac：`brew install hudochenkov/sshpass/sshpass`（Homebrew 官方已移除，用此 tap）
+  - Windows：跳到方式 B
 
-4. 验证密钥可用：
+**方式 B：Python paramiko（跨平台，无需额外安装）**
+```bash
+# 检查 paramiko
+python3 -c "import paramiko" 2>/dev/null || pip3 install paramiko -q
+```
+然后执行：
+```python
+# 本地运行此 Python 脚本（Bash 工具直接执行）
+python3 - <<'PYEOF'
+import paramiko, sys
+
+host = "{VPS_IP}"
+port = {SSH_PORT}
+user = "{SSH_USER}"
+password = "{SSH_PASSWORD}"
+pubkey_path = "~/.ssh/proxy_expert_ed25519.pub"
+
+import os
+pubkey_path = os.path.expanduser(pubkey_path)
+with open(pubkey_path) as f:
+    pubkey = f.read().strip()
+
+client = paramiko.SSHClient()
+client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+client.connect(host, port=port, username=user, password=password, timeout=15)
+
+cmd = (
+    f"mkdir -p ~/.ssh && chmod 700 ~/.ssh && "
+    f"echo '{pubkey}' >> ~/.ssh/authorized_keys && "
+    f"chmod 600 ~/.ssh/authorized_keys && "
+    f"echo 公钥注入成功"
+)
+stdin, stdout, stderr = client.exec_command(cmd)
+print(stdout.read().decode())
+err = stderr.read().decode()
+if err:
+    print("STDERR:", err, file=sys.stderr)
+client.close()
+PYEOF
+```
+看到 "公钥注入成功" 则继续。
+
+3. 验证密钥可用（无论用哪种方式注入，最后都验证一次）：
 ```bash
 ssh -i ~/.ssh/proxy_expert_ed25519 -o StrictHostKeyChecking=no -o ConnectTimeout=10 -p {SSH_PORT} {SSH_USER}@{VPS_IP} "echo 密钥登录成功"
 ```
 
-看到 "密钥登录成功" 则继续，否则排查（常见问题：authorized_keys 权限、.ssh 目录权限）。
+看到 "密钥登录成功" 则继续。失败时常见原因：authorized_keys 权限不对（重新用密码登 chmod 600）、VPS 禁用了密码认证（检查 `/etc/ssh/sshd_config` 的 `PasswordAuthentication`）。
+
+> **注意**：整个过程用户不需要打开 VPS 的 Web 终端或自己执行任何命令，全部由本地 AI 自动完成。
 
 之后所有 SSH 命令统一用：
 ```
