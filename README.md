@@ -38,6 +38,20 @@
 
 ---
 
+## 前置要求
+
+- **境外 VPS**：Ubuntu 20.04+ 推荐，至少 512MB 内存
+  - 推荐服务商：搬瓦工（CN2 GIA 线路）、Vultr、Hetzner
+  - ⚠️ 尽量不要用国内云厂商的海外节点（腾讯云轻量、阿里云），晚高峰丢包严重
+- **本地客户端**：[Clash Verge Rev](https://clashvergerev.com/install)（Mac / Windows 均有）
+- **AI CLI 工具**（以下任选其一，括号内为已实测组合）：
+  - [Claude Code](https://claude.ai/code)（CC + kimi-k2.6）
+  - [Kimi CLI](https://www.kimi.com/code)（kimi-cli + kimi-k2.6）
+  - 其他任意支持 skill 调用的 CLI 工具
+- **上游 SOCKS5**（可选）：用于以纯净 IP 登录 AI 服务
+
+---
+
 ## 安装
 
 ### 方式一：Claude Code Marketplace
@@ -114,20 +128,6 @@ Step 8    故障排查模式（先读验收报告，排查后追加记录）
 | Clash Verge 导入配置 | 🔶 半自动 | 自动生成 YAML，引导用户粘贴导入 |
 | 验收测试 | ✅ 全自动 | 含 Google / Claude / ChatGPT 连通性检查 |
 | 生成验收报告 | ✅ 全自动 | 自动写入 `proxy-acceptance-report.md` |
-
----
-
-## 前置要求
-
-- **境外 VPS**：Ubuntu 20.04+ 推荐，至少 512MB 内存
-  - 推荐服务商：搬瓦工（CN2 GIA 线路）、Vultr、Hetzner
-  - ⚠️ 尽量不要用国内云厂商的海外节点（腾讯云轻量、阿里云），晚高峰丢包严重
-- **本地客户端**：[Clash Verge Rev](https://clashvergerev.com/install)（Mac / Windows 均有）
-- **AI CLI 工具**（以下任选其一，括号内为已实测组合）：
-  - [Claude Code](https://claude.ai/code)（CC + kimi-k2.6）
-  - [Kimi CLI](https://www.kimi.com/code)（kimi-cli + kimi-k2.6）
-  - 其他任意支持 skill 调用的 CLI 工具
-- **上游 SOCKS5**（可选）：用于以纯净 IP 登录 AI 服务
 
 ---
 
