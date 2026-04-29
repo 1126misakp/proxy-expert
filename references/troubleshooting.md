@@ -103,6 +103,90 @@ ssh ... "tail -50 /var/log/sing-box/sing-box.log"
    - 启用上游 SOCKS5，切换到方案 C（AI 站走纯净 IP）
    - 更换住宅 IP 上游服务商
 
+### 状况 4b：ChatGPT 打不开但 Claude/Gemini 正常（ERR_CONNECTION_CLOSED）
+
+**症状**：切换 IP（如切到备用 IP 再切回主 IP）后，只有 `chatgpt.com` 打不开，提示：
+
+```
+chatgpt.com 意外终止了连接。
+ERR_CONNECTION_CLOSED
+```
+
+但 Claude、Gemini 及其他网站都正常。这不是节点被封，而是 Chrome 缓存了旧连接的 TLS/HSTS/socket 状态，与新 IP 发生冲突。
+
+**最快恢复：彻底清理 Chrome 网络状态**
+
+1. **关闭 Chrome QUIC**
+
+   在出问题的 Chrome 地址栏打开：
+   ```
+   chrome://flags/#enable-quic
+   ```
+   把 `Experimental QUIC protocol` 改成 `Disabled`。
+
+2. **清除 Chrome DNS 缓存**
+
+   打开：
+   ```
+   chrome://net-internals/#dns
+   ```
+   点击 `Clear host cache`。
+
+3. **清除 Chrome socket 连接池**
+
+   打开：
+   ```
+   chrome://net-internals/#sockets
+   ```
+   依次点击：
+   - `Close idle sockets`
+   - `Flush socket pools`
+
+4. **删除 chatgpt.com 的 HSTS 状态**
+
+   打开：
+   ```
+   chrome://net-internals/#hsts
+   ```
+   在 `Delete domain security policies` 下输入以下域名，逐个点击 `Delete`：
+   ```
+   chatgpt.com
+   openai.com
+   auth.openai.com
+   chat.openai.com
+   oaistatic.com
+   oaiusercontent.com
+   ```
+
+5. **完全退出 Chrome**
+
+   不要只关窗口，要彻底退出（`Cmd + Q`），或在终端执行：
+   ```bash
+   pkill -x "Google Chrome"
+   ```
+   然后重新打开 Chrome 访问 `https://chatgpt.com`。
+
+**第二层：清系统 DNS 缓存**
+
+如果上述步骤无效，在终端执行：
+
+Mac：
+```bash
+sudo dscacheutil -flushcache
+sudo killall -HUP mDNSResponder
+```
+
+Windows（管理员 PowerShell）：
+```powershell
+ipconfig /flushdns
+```
+
+然后重启 Clash Verge（完全退出再重新打开），确认 TUN 已开启、当前节点仍是主 IP 的 Reality 节点。
+
+**额外场景**：刚装好梯子登录 GPT/Claude 时提示"当前区域不在可访问范围"，也可以尝试以上步骤并清空 Cookie。
+
+---
+
 ### 状况 5：Reality 真的被封（极少见，但有应对）
 
 症状：`nc` 测端口不通，但 `ping` VPS 通（ICMP 没封，TCP 443 被封）。
@@ -124,6 +208,7 @@ ssh ... "tail -50 /var/log/sing-box/sing-box.log"
 |---|---|---|
 | Cloudflare speedtest 显示 60% 丢包 | 网络真的丢包 | UDP 测丢包，Clash 关了 UDP，用 fast.com 测 |
 | Reality 日志里有大量 invalid connection | 服务异常 | GFW 主动探测被拦截，越多越说明伪装有效 |
+| 切换 IP 后只有 ChatGPT 打不开 | 节点被封了 | Chrome 缓存了旧连接的 TLS/HSTS/socket 状态，按状况 4b 清理即可 |
 | tar 提示 "Removing leading /" | 备份出错 | 正常行为，tar 把绝对路径转相对路径 |
 | PowerShell 里 curl 报错 | curl 不可用 | 要用 curl.exe（加.exe）才是真正的 curl |
 | fail2ban status 报 socket 错误 | 服务异常 | 服务刚启动还没就绪，等 2-3 秒再查 |
