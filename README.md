@@ -1,4 +1,4 @@
-# proxy-expert — 魔法专家技能
+# proxy-expert — 魔法搭建专家技能
 
 一个端到端的魔法搭建Skill，适用于任何可以调用skills的智能体，基于 **VLESS + Reality + sing-box + 本地clash-verge** 方案，支持 Mac 和 Windows，自动化 VPS 服务端部署，引导客户端配置，最终通过验收标准确认搭建成功。
 
