@@ -25,6 +25,7 @@ done
 - **参考文档**：`$SKILL_DIR/references/server-configs.md`（三种服务端方案配置）、`$SKILL_DIR/references/client-config.md`（客户端 YAML 模板）、`$SKILL_DIR/references/troubleshooting.md`（故障排查）
 - **自动化范围**：VPS 服务端全程自动化（SSH 执行）；客户端生成配置文件，GUI 步骤给用户做
 - **信息来源**：始终从 `proxy-setup-info.txt` 读取敏感信息，不在对话中让用户粘贴密码
+- **⚠️ 每次 SSH 操作前**：必须重新读取 `proxy-setup-info.txt`，确保使用最新信息（用户可能中途改了密码、密钥路径或换了 VPS）
 
 ---
 
@@ -97,9 +98,46 @@ SNI_DOMAIN=www.apple.com
 
 ---
 
+## Step 1.5：VPS 连通质量检测
+
+用户保存 `proxy-setup-info.txt` 后，**立即读取文件**获取 `VPS_IP`，测试本机到 VPS 的网络质量，再决定是否继续。
+
+### 丢包率 + 延迟测试
+
+**Mac/Linux：**
+```bash
+ping -c 20 {VPS_IP}
+```
+
+**Windows（CMD 或 PowerShell）：**
+```cmd
+ping -n 20 {VPS_IP}
+```
+
+### 解读规则
+
+**丢包率：**
+- < 5%：✅ 正常，继续
+- 5%–10%：⚠️ 有丢包，告知用户体验可能受影响，询问是否继续或更换 VPS
+- > 10%：🔴 丢包过高，**强烈建议更换 VPS**，等用户明确表态后再继续
+
+**平均延迟（RTT）：**
+- < 100ms：极佳
+- 100–200ms：良好
+- 200–300ms：可接受，速度会有明显感知
+- > 300ms：建议换线路（CN2 GIA 或美西节点更优）
+
+### 用户更换 VPS 时的处理
+
+1. 提示用户更新 `proxy-setup-info.txt` 中的 `VPS_IP` 及相关认证信息，保存后告知继续
+2. 用户确认后，**重新读取** `proxy-setup-info.txt`，再次执行本步骤测试
+3. 新 VPS 质量达标后，继续 Step 2
+
+---
+
 ## Step 2：读取配置，确认方案
 
-读取 `proxy-setup-info.txt`，解析所有字段。然后向用户展示即将部署的方案摘要：
+**先重新读取** `proxy-setup-info.txt`（即使刚填过），解析所有字段。然后向用户展示即将部署的方案摘要：
 
 - VPS：`{VPS_IP}:{SSH_PORT}`，用户 `{SSH_USER}`，认证方式 `{SSH_AUTH}`
 - 方案：A/B/C（说明具体含义）
@@ -113,6 +151,8 @@ SNI_DOMAIN=www.apple.com
 ---
 
 ## Step 3：处理 SSH 认证
+
+**开始本步骤前，先重新读取 `proxy-setup-info.txt`**，确保使用最新的认证信息（密码/密钥路径/端口可能已被用户修改）。
 
 ### 如果 SSH_AUTH=key
 检查密钥文件是否存在：
@@ -334,6 +374,17 @@ tar -czf /root/proxy-backup-$(date +%Y%m%d).tar.gz \
 
 读取 `$SKILL_DIR/references/client-config.md`，将 `.proxy-keys.txt` 中的值填入模板，在当前目录生成 `clash-verge-config.yaml`。
 
+⚠️ **生成时必须完整包含以下所有直连规则，一条也不能少**（原样保留）：
+```yaml
+  - IP-CIDR,<VPS_IP>/32,DIRECT,no-resolve    # 必须放 rules 第一位，防止 SSH 回环死锁
+  - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve    # 本机回环直连
+  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve # 局域网直连
+  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve     # 内网直连
+  - GEOIP,CN,DIRECT                           # 国内 IP 直连
+  - DOMAIN-SUFFIX,cn,DIRECT                   # 国内域名直连
+  - MATCH,PROXY                               # 其余走代理
+```
+
 文件顶部加注释，说明如何导入：
 ```yaml
 # ============================================================
@@ -357,13 +408,21 @@ tar -czf /root/proxy-backup-$(date +%Y%m%d).tar.gz \
 
 ## Step 6：自动化验收测试
 
-用户告知 Clash Verge 已配置并开启系统代理后，执行以下测试（全部在本地执行，不需要 Clash 开着，这些测试是直连 VPS 的）：
+用户告知 Clash Verge 已配置并开启系统代理后，分两组执行测试。
 
-### 测试 1：443 端口可达
+### 第一组：VPS 直连测试（不经过 Clash）
+
+以下测试直连 VPS，验证服务端配置是否正常，与 Clash 是否开启无关。
+
+#### 测试 1：443 端口可达
 - **Mac/Linux：** `nc -z -w 5 {VPS_IP} 443 && echo 端口通`
-- **Windows：** 检测平台，用 `Test-NetConnection` 替代
+- **Windows（PowerShell）：**
+```powershell
+Test-NetConnection -ComputerName {VPS_IP} -Port 443
+# TcpTestSucceeded : True = 通
+```
 
-### 测试 2：Reality 伪装
+#### 测试 2：Reality 伪装
 ```bash
 # Mac/Linux（关闭系统代理后执行）
 curl -sI --resolve "www.apple.com:443:{VPS_IP}" https://www.apple.com/ -k 2>&1 | head -5
@@ -372,29 +431,77 @@ Windows 用 `curl.exe`（加 `.exe` 后缀）。
 
 期望：返回 `HTTP/2 200` 和 `server: Apple`。
 
-### 测试 3：服务端状态
+#### 测试 3：服务端状态
 ```bash
 ssh -i {KEY} ... "systemctl is-active sing-box"
 ```
 期望：`active`
 
-### 测试 4：日志检查
+#### 测试 4：日志检查
 ```bash
 ssh -i {KEY} ... "tail -20 /var/log/sing-box/sing-box.log"
 ```
 期望：无 ERROR；可见 `REALITY: processed invalid connection`（这是 GFW 探测被拦截，属正常现象）
 
-### 验收标准打印（以表格形式展示）
+---
+
+### 第二组：代理连通测试（需要 Clash 系统代理已开启）
+
+确认 Clash 系统代理开启后，通过本地代理端口测试各目标站点的真实连通性。
+
+#### 测试 5：Google 连通
+```bash
+# Mac/Linux
+curl -x http://127.0.0.1:7890 -sI --max-time 15 https://www.google.com 2>&1 | head -3
 ```
-[ ] 443 端口可达              TcpTestSucceeded = True / 端口通
-[ ] Reality 伪装正常          HTTP/2 200 + server: Apple
-[ ] sing-box 服务运行中       active
-[ ] 日志无 ERROR
+```powershell
+# Windows
+curl.exe -x http://127.0.0.1:7890 -sI --max-time 15 https://www.google.com
 ```
+期望：返回 `HTTP/2 200` 或 `200 OK`
+
+#### 测试 6：Claude.ai 连通
+```bash
+# Mac/Linux
+curl -x http://127.0.0.1:7890 -sI --max-time 15 https://claude.ai 2>&1 | head -3
+```
+```powershell
+# Windows
+curl.exe -x http://127.0.0.1:7890 -sI --max-time 15 https://claude.ai
+```
+期望：返回 2xx 或 3xx 状态码（重定向到登录页属正常）
+
+#### 测试 7：ChatGPT 连通
+```bash
+# Mac/Linux
+curl -x http://127.0.0.1:7890 -sI --max-time 15 https://chat.openai.com 2>&1 | head -3
+```
+```powershell
+# Windows
+curl.exe -x http://127.0.0.1:7890 -sI --max-time 15 https://chat.openai.com
+```
+期望：返回 2xx 或 3xx 状态码
 
 ---
 
-## Step 7：用户最终验收
+### 验收标准总表
+
+| 测试项 | 期望结果 |
+|---|---|
+| 443 端口可达 | 端口通 / TcpTestSucceeded=True |
+| Reality 伪装 | HTTP/2 200 + server: Apple |
+| sing-box 服务 | active |
+| 日志无 ERROR | 无 ERROR 行 |
+| Google 连通 | 2xx/3xx 状态码 |
+| Claude.ai 连通 | 2xx/3xx 状态码 |
+| ChatGPT 连通 | 2xx/3xx 状态码 |
+
+> ⚠️ **已知风险（需在验收报告中注明）：**
+> Claude / ChatGPT 的流式输出（SSE 长连接）经代理时，偶发连接中断或输出停止。这是 TCP 长连接经代理的正常特性，对功能影响有限，但体验略有下降。如频繁发生，检查本地→VPS 丢包率，或考虑更换 VPS 服务商以改善线路质量。
+
+---
+
+## Step 7：用户最终验收 + 生成验收报告
 
 提示用户：
 
@@ -405,10 +512,47 @@ ssh -i {KEY} ... "tail -20 /var/log/sing-box/sing-box.log"
 
 询问："以上验证都通过了吗？"
 
-**通过：** 恭喜！展示以下收尾信息：
-- 密钥文件位置：`.proxy-keys.txt`（妥善保管）
+**通过后，立即在当前工作目录生成验收报告 `proxy-acceptance-report.md`：**
+
+```markdown
+# 梯子搭建验收报告
+
+**生成时间：** {YYYY-MM-DD HH:MM}
+**VPS IP：** {VPS_IP}
+**SSH 端口：** {SSH_PORT}
+**部署方案：** {PLAN}（A=VPS直连 / B=全走上游 / C=混合路由）
+**SNI 伪装域名：** {SNI_DOMAIN}
+
+## 初次部署验收结果
+
+| 测试项 | 结果 | 备注 |
+|---|---|---|
+| VPS 网络质量 | {丢包率}% 丢包 / 平均延迟 {RTT}ms | Step 1.5 测试结果 |
+| 443 端口可达 | ✅ / ❌ | |
+| Reality 伪装 | ✅ HTTP/2 200 + server: Apple / ❌ | |
+| sing-box 服务 | ✅ active / ❌ | |
+| 日志无 ERROR | ✅ / ❌ | |
+| Google 连通 | ✅ {状态码} / ❌ | |
+| Claude.ai 连通 | ✅ {状态码} / ❌ | |
+| ChatGPT 连通 | ✅ {状态码} / ❌ | |
+
+## 已知风险说明
+
+- **流式输出偶发中断**：Claude / ChatGPT 的 SSE 流式输出经代理时，偶发断流或停止，属 TCP 长连接经代理的正常特性，对功能影响有限。如频繁发生，排查本地→VPS 丢包率，或更换 VPS 服务商。
+- **AI 服务 IP 风控**：数据中心 IP 可能触发 Claude / GPT 的 IP 信誉检测（弹验证码或拒绝登录）。方案 C 已通过上游 SOCKS5 缓解此风险。
+
+## 问题记录
+
+---
+
+（后续排障记录追加至此）
+```
+
+告知用户：
+- 验收报告已保存至 `proxy-acceptance-report.md`，可长期保存，无敏感信息
+- 密钥文件位置：`.proxy-keys.txt`（妥善保管，不要泄露）
 - 维护建议：每月 `apt update && apt upgrade -y`；每季度检查 sing-box 版本
-- 如果搬瓦工炸了：只需新 VPS 装好 sing-box，把配置还原，Clash Verge 改 server IP 即可
+- 如果 VPS 换了：新 VPS 安装 sing-box，还原配置，Clash Verge 改 server IP 即可
 
 **未通过：** 读取 `$SKILL_DIR/references/troubleshooting.md`，按层级排查。常见路径：
 1. Clash 系统代理没开？→ 开启
@@ -419,9 +563,53 @@ ssh -i {KEY} ... "tail -20 /var/log/sing-box/sing-box.log"
 
 ---
 
+## Step 8：故障排查模式
+
+**当用户带着梯子故障来询问时**（不是全新部署），执行以下流程：
+
+### 8.1 先读验收报告
+
+```bash
+cat proxy-acceptance-report.md
+```
+
+如果文件存在，从中了解：
+- 初始搭建的 VPS 信息和方案
+- 历史验收测试结果（判断是否曾经通过）
+- 已有的问题记录（避免重复排查已知问题）
+
+如果文件不存在，直接询问用户 VPS IP 和当前症状。
+
+### 8.2 重新读取配置
+
+```bash
+cat proxy-setup-info.txt
+```
+
+获取最新的 VPS_IP、SSH_PORT、SSH_USER 等信息。
+
+### 8.3 按 troubleshooting.md 排查
+
+读取 `$SKILL_DIR/references/troubleshooting.md`，按症状匹配对应排查流程。
+
+### 8.4 问题解决后，追加记录
+
+在 `proxy-acceptance-report.md` 文件末尾的"问题记录"区追加：
+
+```markdown
+### {YYYY-MM-DD} - {问题简述}
+
+**现象：** {用户描述的症状}
+**根因：** {排查后确认的根本原因}
+**解决方案：** {具体操作步骤}
+```
+
+---
+
 ## 关键注意事项
 
-- **平台检测：** 从系统环境 `Platform:` 字段判断 `darwin`/`linux`/`win32`，影响 `curl` vs `curl.exe`、`nc` vs `Test-NetConnection` 等命令
+- **每次 SSH 前重读配置：** 每次执行 SSH 操作前，先重新读取 `proxy-setup-info.txt`，防止用户中途修改密码、密钥或 VPS 信息而沿用旧值
+- **平台检测：** 从系统环境 `Platform:` 字段判断 `darwin`/`linux`/`win32`，影响 `curl` vs `curl.exe`、`nc` vs `Test-NetConnection`、`ping -c` vs `ping -n` 等命令
 - **Windows SSH：** Win 10+ 内置 OpenSSH，Bash 工具可直接调用 `ssh`
 - **密钥安全：** PrivateKey 只写服务端 config，绝不显示给用户；PublicKey 给客户端
 - **防死循环：** Clash Verge YAML 的 rules 里第一条必须是 `IP-CIDR,{VPS_IP}/32,DIRECT,no-resolve`
@@ -436,3 +624,4 @@ ssh -i {KEY} ... "tail -20 /var/log/sing-box/sing-box.log"
 | `proxy-setup-info.txt` | 用户填写的配置信息（含敏感信息，不要上传 git）|
 | `.proxy-keys.txt` | 自动保存的密钥（隐藏文件，不要泄露）|
 | `clash-verge-config.yaml` | 客户端配置（导入 Clash Verge 用）|
+| `proxy-acceptance-report.md` | 验收报告和问题记录（无敏感信息，可长期保存）|
