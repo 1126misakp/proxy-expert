@@ -1,16 +1,16 @@
 # proxy-expert — Claude Code 搭梯子专家技能
 
-一个端到端的翻墙搭建 Claude Code Skill，基于 **VLESS + Reality + sing-box** 方案，支持 Mac 和 Windows，自动化 VPS 服务端部署，引导客户端配置，最终通过验收标准确认成功。
+一个端到端的魔法搭建Skill，基于 **VLESS + Reality + sing-box** 方案，支持 Mac 和 Windows，自动化 VPS 服务端部署，引导客户端配置，最终通过验收标准确认成功。
 
-**实测效果**：940 Mbps 下载速度，抗 GFW 主动探测，长期稳定运行。
+**实测效果**：接近上游出口上限的下载速度，抗 GFW 主动探测，长期稳定运行。
 
 ---
 
 ## 适用场景
 
-- 想翻墙访问 Google、YouTube、GitHub 等
+- 想魔法访问 Google、YouTube、GitHub 等
 - 需要以纯净 IP 登录 Claude、ChatGPT 等 AI 服务（避免风控）
-- 有一台境外 VPS，想自己搭而不依赖机场
+- 有一台VPS，想自己搭而不依赖机场
 
 ---
 
@@ -46,14 +46,15 @@
 /reload-plugins
 ```
 
-### 方式二：本地安装 `.skill` 文件
+### 方式二：手动安装
 
-下载 [proxy-expert.skill](https://github.com/1126misakp/proxy-expert/releases) 后：
-
-```bash
-/plugin install /path/to/proxy-expert.skill
-/reload-plugins
-```
+1. 下载本仓库（点 GitHub 页面右上角 Code → Download ZIP）
+2. 解压缩后，将文件夹重命名为 `proxy-expert`（去掉末尾的 `-main`）
+3. 将 `proxy-expert` 文件夹放入你所用 CLI 工具的 skills 目录：
+   - Claude Code：`~/.claude/skills/`
+   - Kimi CLI：`~/.kimi/skills/`
+   - 其他 CLI：参考对应工具的文档找到 skills 目录，没有则手动创建
+4. 重启 CLI 或执行 `/reload-plugins`
 
 ---
 
@@ -105,9 +106,12 @@ Step 8    故障排查模式（先读验收报告，排查后追加记录）
 
 - **境外 VPS**：Ubuntu 20.04+ 推荐，至少 512MB 内存
   - 推荐服务商：搬瓦工（CN2 GIA 线路）、Vultr、Hetzner
-  - ⚠️ 不要用国内云厂商的海外节点（腾讯云轻量、阿里云），晚高峰丢包严重
-- **本地客户端**：[Clash Verge Rev](https://github.com/clash-verge-rev/clash-verge-rev/releases)（Mac / Windows 均有）
-- **Claude Code**：已安装并登录
+  - ⚠️ 尽量不要用国内云厂商的海外节点（腾讯云轻量、阿里云），晚高峰丢包严重
+- **本地客户端**：[Clash Verge Rev](https://clashvergerev.com/install)（Mac / Windows 均有）
+- **AI CLI 工具**（以下任选其一，括号内为已实测组合）：
+  - [Claude Code](https://claude.ai/code)（CC + claude-sonnet / claude-opus）
+  - [Kimi CLI](https://www.kimi.com/code)（kimi-cli + kimi-k2.6 已实测）
+  - 其他任意支持 skill 调用的 CLI 工具
 - **上游 SOCKS5**（可选）：用于以纯净 IP 登录 AI 服务
 
 ---
@@ -145,7 +149,7 @@ your-project/
 ### 方案 B：全流量走上游
 所有流量通过上游 SOCKS5 出口，IP 纯净但速度受上游限制。
 
-### 方案 C：混合路由（推荐）
+### 方案 C：混合路由（暂不推荐，当前存在瑕疵，正在完善中）
 AI 站（Claude、ChatGPT）走上游纯净 IP，其他网站直连 VPS 享受高速。
 
 ---
