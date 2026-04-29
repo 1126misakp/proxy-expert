@@ -197,13 +197,15 @@ sshpass -p "{SSH_PASSWORD}" ssh-copy-id \
 
 **方式 B：Python paramiko（跨平台，无需额外安装）**
 ```bash
-# 检查 paramiko
-python3 -c "import paramiko" 2>/dev/null || pip3 install paramiko -q
+# 在当前目录创建虚拟环境（已存在则跳过），再安装 paramiko
+python3 -m venv .venv 2>/dev/null || true
+.venv/bin/pip install paramiko -q 2>/dev/null || .venv/Scripts/pip install paramiko -q
 ```
 然后执行：
 ```python
 # 本地运行此 Python 脚本（Bash 工具直接执行）
-python3 - <<'PYEOF'
+# Mac/Linux 用 .venv/bin/python3，Windows 用 .venv/Scripts/python.exe
+.venv/bin/python3 - <<'PYEOF'
 import paramiko, sys
 
 host = "{VPS_IP}"
@@ -623,6 +625,7 @@ cat proxy-setup-info.txt
 ## 关键注意事项
 
 - **每次 SSH 前重读配置：** 每次执行 SSH 操作前，先重新读取 `proxy-setup-info.txt`，防止用户中途修改密码、密钥或 VPS 信息而沿用旧值
+- **Python 脚本依赖隔离：** 凡需在本地运行 Python 脚本（如 paramiko 注入），必须在当前工作目录创建并使用虚拟环境（`python3 -m venv .venv`），通过 `.venv/bin/pip` 安装依赖，通过 `.venv/bin/python3` 执行脚本，禁止使用全局 pip 或 `--user` 安装
 - **平台检测：** 从系统环境 `Platform:` 字段判断 `darwin`/`linux`/`win32`，影响 `curl` vs `curl.exe`、`nc` vs `Test-NetConnection`、`ping -c` vs `ping -n` 等命令
 - **Windows SSH：** Win 10+ 内置 OpenSSH，Bash 工具可直接调用 `ssh`
 - **密钥安全：** PrivateKey 只写服务端 config，绝不显示给用户；PublicKey 给客户端
