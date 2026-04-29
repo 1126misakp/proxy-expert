@@ -465,7 +465,10 @@ curl -x http://127.0.0.1:7890 -sI --max-time 15 https://www.google.com 2>&1 | he
 # Windows
 curl.exe -x http://127.0.0.1:7890 -sI --max-time 15 https://www.google.com
 ```
-期望：返回 `HTTP/2 200` 或 `200 OK`
+期望：收到任意 HTTP 响应（说明流量已经过代理到达目标服务器）。
+- 2xx/3xx：✅ 完全正常
+- 4xx（如 403 Cloudflare challenge）：⚠️ 流量通，但目标站点对当前 IP 触发了 challenge，提示用户（见下方说明）
+- 超时 / curl 报错（exit code 非 0）：❌ 代理未通，需排查
 
 #### 测试 6：Claude.ai 连通
 ```bash
@@ -476,7 +479,7 @@ curl -x http://127.0.0.1:7890 -sI --max-time 15 https://claude.ai 2>&1 | head -3
 # Windows
 curl.exe -x http://127.0.0.1:7890 -sI --max-time 15 https://claude.ai
 ```
-期望：返回 2xx 或 3xx 状态码（重定向到登录页属正常）
+期望：同上，收到任意 HTTP 响应即为流量通。4xx 时提示 IP 信誉 challenge。
 
 #### 测试 7：ChatGPT 连通
 ```bash
@@ -487,24 +490,28 @@ curl -x http://127.0.0.1:7890 -sI --max-time 15 https://chat.openai.com 2>&1 | h
 # Windows
 curl.exe -x http://127.0.0.1:7890 -sI --max-time 15 https://chat.openai.com
 ```
-期望：返回 2xx 或 3xx 状态码
+期望：同上，收到任意 HTTP 响应即为流量通。4xx 时提示 IP 信誉 challenge。
 
 ---
 
 ### 验收标准总表
 
-| 测试项 | 期望结果 |
-|---|---|
-| 443 端口可达 | 端口通 / TcpTestSucceeded=True |
-| Reality 伪装 | HTTP/2 200 + server: Apple |
-| sing-box 服务 | active |
-| 日志无 ERROR | 无 ERROR 行 |
-| Google 连通 | 2xx/3xx 状态码 |
-| Claude.ai 连通 | 2xx/3xx 状态码 |
-| ChatGPT 连通 | 2xx/3xx 状态码 |
+判断原则：**代理流量通 = 验收通过；是否遇到 challenge 是 IP 信誉问题，不是代理故障。**
 
-> ⚠️ **已知风险（需在验收报告中注明）：**
-> Claude / ChatGPT 的流式输出（SSE 长连接）经代理时，偶发连接中断或输出停止。这是 TCP 长连接经代理的正常特性，对功能影响有限，但体验略有下降。如频繁发生，检查本地→VPS 丢包率，或考虑更换 VPS 服务商以改善线路质量。
+| 测试项 | 通过条件 | 备注 |
+|---|---|---|
+| 443 端口可达 | 端口通 / TcpTestSucceeded=True | |
+| Reality 伪装 | HTTP/2 200 + server: Apple | |
+| sing-box 服务 | active | |
+| 日志无 ERROR | 无 ERROR 行 | |
+| Google 连通 | 收到任意 HTTP 响应 | 4xx 时提示 challenge ⚠️ |
+| Claude.ai 连通 | 收到任意 HTTP 响应 | 4xx 时提示 challenge ⚠️ |
+| ChatGPT 连通 | 收到任意 HTTP 响应 | 4xx 时提示 challenge ⚠️ |
+
+> ⚠️ **关于 challenge 的说明（需在验收报告中注明）：**
+> 如果上述测试返回 4xx（如 403），说明代理流量本身是通的，但目标站点对当前出口 IP 触发了安全验证（Cloudflare challenge、Google 人机验证等）。这是 IP 信誉问题，不影响验收通过。建议用浏览器实际访问确认是否能正常使用；如使用 AI 服务时频繁遇到 challenge，可考虑启用上游 SOCKS5 切换为方案 C。
+>
+> 此外，Claude / ChatGPT 的流式输出（SSE 长连接）经代理时，偶发连接中断或输出停止。这是 TCP 长连接经代理的正常特性，对功能影响有限，但体验略有下降。如频繁发生，检查本地→VPS 丢包率，或考虑更换 VPS 服务商以改善线路质量。
 
 ---
 
@@ -539,9 +546,9 @@ curl.exe -x http://127.0.0.1:7890 -sI --max-time 15 https://chat.openai.com
 | Reality 伪装 | ✅ HTTP/2 200 + server: Apple / ❌ | |
 | sing-box 服务 | ✅ active / ❌ | |
 | 日志无 ERROR | ✅ / ❌ | |
-| Google 连通 | ✅ {状态码} / ❌ | |
-| Claude.ai 连通 | ✅ {状态码} / ❌ | |
-| ChatGPT 连通 | ✅ {状态码} / ❌ | |
+| Google 连通 | ✅ 流量通({状态码}) / ⚠️ challenge({状态码}) / ❌ 超时 | |
+| Claude.ai 连通 | ✅ 流量通({状态码}) / ⚠️ challenge({状态码}) / ❌ 超时 | |
+| ChatGPT 连通 | ✅ 流量通({状态码}) / ⚠️ challenge({状态码}) / ❌ 超时 | |
 
 ## 已知风险说明
 
