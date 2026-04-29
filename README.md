@@ -3,6 +3,7 @@
 一个端到端的魔法搭建Skill，适用于任何可以调用skills的智能体，基于 **VLESS + Reality + sing-box + 本地clash-verge** 方案，支持 Mac 和 Windows，自动化 VPS 服务端部署，引导客户端配置，最终通过验收标准确认搭建成功。
 
 **实测效果**：接近上游出口上限的下载速度，抗 GFW 主动探测，长期稳定运行。
+
 **安全声明**：VPS IP、SSH 密码/密钥、Reality 私钥等敏感信息始终保存在本地文件（`proxy-setup-info.txt`、`.proxy-keys.txt`），不会出现在对话记录中。技能通过读取本地文件获取凭据，全程不落盘聊天记录。
 
 ---
