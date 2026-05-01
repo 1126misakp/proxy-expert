@@ -570,12 +570,186 @@ curl.exe -x http://127.0.0.1:7890 -sI --max-time 15 https://chat.openai.com
 - 维护建议：每月 `apt update && apt upgrade -y`；每季度检查 sing-box 版本
 - 如果 VPS 换了：新 VPS 安装 sing-box，还原配置，Clash Verge 改 server IP 即可
 
+然后询问："电脑端梯子已配置完成。是否需要顺便配置手机端（安卓 / iOS）？手机将使用同一套 VLESS+Reality 配置接入，无需修改服务端。"
+
+- 用户说不需要 → 直接结束，恭喜用户搭建完成
+- 用户说需要 → 进入 Step 7.5
+
 **未通过：** 读取 `$SKILL_DIR/references/troubleshooting.md`，按层级排查。常见路径：
 1. Clash 系统代理没开？→ 开启
 2. 节点没选中？→ 代理页面选中节点
 3. `nc` 端口不通？→ SSH 看 sing-box 状态
 4. sing-box 挂了？→ `systemctl restart sing-box`，看日志
 5. Reality 伪装测试失败？→ 检查 SNI 域名、密钥是否匹配
+
+---
+
+## Step 7.5：手机端配置（可选）
+
+> **前提**：仅在用户在 Step 7 中明确表示需要配置手机端时才执行。手机端与电脑端共用同一套 VPS 服务端配置（相同的 UUID、PublicKey、ShortID、SNI），无需修改服务端。
+
+### 7.5.1 确认手机操作系统
+
+询问用户手机系统：
+
+> "你的手机是什么系统？1. 安卓  2. iOS"
+
+两种系统均使用 **Hiddify** 客户端，以下分别说明下载方式。
+
+### 7.5.2 下载并安装 Hiddify
+
+**安卓：**
+- 下载地址：https://github.com/hiddify/hiddify-app/releases
+- 下载最新版 APK（文件名通常包含 `android-universal`），安装到手机
+- 如果 GitHub 访问困难，可先在电脑下载 APK，再通过数据线/微信/QQ 传到手机安装
+
+**iOS：**
+- 需要非国区 Apple ID（美区、港区、日区等均可）
+- 在 App Store 搜索 "Hiddify" 下载安装
+- 如果用户没有非国区账号：可自行注册（Apple ID 官网切换地区，无需付款方式），或使用已有的非国区账号
+
+### 7.5.3 生成 VLESS 分享链接
+
+从 `.proxy-keys.txt` 读取以下字段：
+
+- `UUID`
+- `VPS_IP`
+- `PUBLIC_KEY`（PublicKey，不是 PrivateKey）
+- `SNI_DOMAIN`（或 `.proxy-keys.txt` 中的 `SNI`）
+- `SHORT_ID`（或 `.proxy-keys.txt` 中的 `ShortID`）
+
+生成 VLESS 分享链接：
+
+```
+vless://{UUID}@{VPS_IP}:443?type=tcp&security=reality&pbk={PUBLIC_KEY}&fp=chrome&sni={SNI_DOMAIN}&sid={SHORT_ID}&flow=xtls-rprx-vision#Reality-{VPS_IP}
+```
+
+**⚠️ 安全提醒：**
+- 链接中包含的是 **PublicKey**，服务端才需要 PrivateKey
+- PrivateKey 绝不放入客户端配置、分享链接、聊天记录或任何文档中
+
+### 7.5.4 导入配置到 Hiddify
+
+步骤：
+1. 复制生成的 VLESS 链接
+2. 打开 Hiddify → 点击右下角 `+`
+3. 选择 "Import from clipboard" / "从剪贴板导入" 或 "Add profile from link" / "从链接添加"
+4. 确认节点信息正确显示（VPS IP、443 端口、Reality 安全类型）
+
+### 7.5.5 Hiddify 基础设置
+
+**路由模式（首次调试）：**
+- 先选择 `Global / 全局`，确认 Google、GitHub 能打开
+- 确认连通后，切换为 `Rule / 规则` + `Bypass Mainland China / 绕过中国大陆`
+
+**DNS 设置：**
+- 远程 DNS：`https://1.1.1.1/dns-query`
+- 备用：`https://dns.google/dns-query` 或 `tls://1.1.1.1`
+- **不要**只写 `1.1.1.1/dns-query`（缺少 `https://` 协议头，客户端可能无法识别）
+
+**其他：**
+- Fake DNS：关闭
+- IPv6：关闭（部分手机网络优先 IPv6，代理链路或上游出口未必稳定支持，容易造成异常）
+
+### 7.5.6 安卓系统设置（如用户是安卓）
+
+**关闭 Private DNS：**
+```
+设置 → 网络和互联网 → 私人 DNS / Private DNS → 关闭（或自动）
+```
+不要手动设置为 `dns.google`、`one.one.one.one` 或 `cloudflare-dns.com`，否则可能与 Hiddify 的 DNS 接管冲突。
+
+**确认 VPN 权限：**
+```
+设置 → 网络和互联网 → VPN
+```
+确保：
+- 当前只有 Hiddify 一个 VPN 在运行
+- 没有 sing-box、AdGuard、Clash、1.1.1.1/WARP 等其他 VPN 占用
+- 没有开启"始终开启的 VPN"
+- 没有开启"屏蔽未通过 VPN 的连接"
+
+**Chrome 安全 DNS（调试时建议关闭）：**
+```
+Chrome → 设置 → 隐私和安全 → 使用安全 DNS → 关闭
+```
+
+**Chrome DNS 缓存清理（如遇到网页打不开）：**
+1. `chrome://net-internals/#dns` → 点击 `Clear host cache`
+2. `chrome://net-internals/#sockets` → 点击 `Flush socket pools`
+3. 彻底关闭 Chrome（不要只关窗口），再重新打开测试
+
+### 7.5.7 手机端验收测试
+
+按以下顺序测试（不要一上来就测 ChatGPT / Claude）：
+
+| 顺序 | 测试项 | 通过标准 |
+|---|---|---|
+| 1 | Hiddify 显示连接成功 | 状态栏或主界面显示已连接，有速度指示 |
+| 2 | 检查出口 IP 显示 | 显示正确的外网 IP（非本地运营商 IP） |
+| 3 | 打开 https://1.1.1.1 | 能打开（验证代理链路通） |
+| 4 | 打开 https://8.8.8.8 | 能打开（验证代理链路通） |
+| 5 | 打开 https://github.com | 能打开 |
+| 6 | 打开 https://www.google.com | 能打开 |
+| 7 | 打开 https://chatgpt.com | 能打开（VPS 直出方案可能触发风控） |
+| 8 | 打开 https://claude.ai | 能打开（同上） |
+| 9 | 测试国内 App（抖音、微信等） | 视频、评论、支付等功能正常 |
+| 10 | 分应用代理设置 | 国内 App 已加入绕过 / Exclude |
+
+> **关于 ChatGPT / Claude 的说明：** 与电脑端 Step 6 相同，4xx 响应说明代理流量通但目标站点触发了 IP 信誉检测（Cloudflare challenge 等），不是代理故障。VPS 直出方案更容易遇到此问题。建议用浏览器实际访问确认是否能正常使用。
+
+### 7.5.8 分应用代理建议
+
+**建议加入绕过的国内 App：**
+抖音、微信、支付宝、淘宝、京东、拼多多、高德地图、百度地图、银行类 App、政务类 App、国内视频 App
+
+**建议走代理的外网 App：**
+Chrome、ChatGPT、Claude、Google Play、GitHub、Gmail、YouTube、Telegram
+
+> **原因：** 抖音等国内 App 的视频 CDN 和评论/账号/风控接口不是同一套链路。视频能刷不代表评论接口正常，这些接口对 DNS、地区、TUN、IPv6、QUIC 更敏感。国内 App 最好直连，不要经过代理。
+
+### 7.5.9 手机端验收结果追加到报告
+
+手机端验收通过后，在 `proxy-acceptance-report.md` 末尾追加：
+
+```markdown
+## 手机端验收结果
+
+**设备系统：** {安卓 / iOS}
+**客户端：** Hiddify
+**验收时间：** {YYYY-MM-DD HH:MM}
+
+| 测试项 | 结果 | 备注 |
+|---|---|---|
+| Hiddify 连接 | ✅ / ❌ | |
+| 出口 IP 正确 | ✅ / ❌ | |
+| 1.1.1.1 可达 | ✅ / ❌ | |
+| 8.8.8.8 可达 | ✅ / ❌ | |
+| GitHub 可达 | ✅ / ❌ | |
+| Google 可达 | ✅ / ❌ | |
+| ChatGPT 可达 | ✅ / ⚠️ / ❌ | 4xx=⚠️ challenge |
+| Claude 可达 | ✅ / ⚠️ / ❌ | 4xx=⚠️ challenge |
+| 国内 App 正常 | ✅ / ❌ | |
+| 分应用代理 | ✅ / ❌ | |
+
+**配置状态：**
+- 路由模式：规则 / 绕过中国大陆
+- 远程 DNS：https://1.1.1.1/dns-query
+- Fake DNS：关闭
+- IPv6：关闭
+- 安卓 Private DNS：关闭
+```
+
+告知用户手机端配置已完成，日常使用时保持 Hiddify 运行即可。
+
+### 7.5.10 手机端未通过的处理
+
+如手机端验收未通过，读取 `$SKILL_DIR/references/troubleshooting.md`，查找"手机端相关状况"（状况 6-9）排查。常见路径：
+
+1. Hiddify 显示连接但网页打不开 → 检查 VPN 权限和其他 VPN 冲突（状况 6）
+2. IP 能打开但域名打不开 → DNS 问题（状况 7）
+3. 国内 App 异常 → 分应用代理绕过（状况 8）
+4. 电脑端可用但手机端不可用 → 手机端特有变量排查（状况 9）
 
 ---
 
@@ -645,5 +819,7 @@ cat proxy-setup-info.txt
 |---|---|
 | `proxy-setup-info.txt` | 用户填写的配置信息（含敏感信息，不要上传 git）|
 | `.proxy-keys.txt` | 自动保存的密钥（隐藏文件，不要泄露）|
-| `clash-verge-config.yaml` | 客户端配置（导入 Clash Verge 用）|
+| `clash-verge-config.yaml` | 电脑端配置（导入 Clash Verge 用）|
 | `proxy-acceptance-report.md` | 验收报告和问题记录（无敏感信息，可长期保存）|
+
+手机端不生成独立配置文件，直接通过 VLESS 分享链接导入 Hiddify。

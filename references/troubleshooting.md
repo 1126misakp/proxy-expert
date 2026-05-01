@@ -202,6 +202,91 @@ ipconfig /flushdns
 
 3. 长期：联系 VPS 服务商更换 IP
 
+---
+
+### 状况 6：Hiddify 显示已连接，但网页/App 打不开
+
+**排查步骤：**
+
+1. 检查 Hiddify 是否真的获得安卓 VPN 权限（状态栏是否有 VPN 图标）
+2. 检查系统里是否有其他 VPN 在运行（sing-box、AdGuard、Clash、WARP 等）
+3. 检查是否开启了"始终开启的 VPN"
+4. 检查是否开启了"屏蔽未通过 VPN 的连接"
+5. 查看 Hiddify 日志，如有以下报错，说明 TUN 虚拟网卡配置失败：
+   ```
+   inbound/tun[tun-in]: configure tun interface: permission denied
+   ```
+
+**处理方式：**
+
+```text
+1. 停止所有 VPN
+2. 强行停止 Hiddify（应用信息 → 强行停止）
+3. 关闭"始终开启的 VPN"
+4. 重启手机
+5. 重新打开 Hiddify 并允许 VPN 权限
+```
+
+---
+
+### 状况 7：IP 能打开，但域名打不开
+
+**测试：**
+
+- `https://1.1.1.1` 和 `https://8.8.8.8` 能打开
+- 但 `https://www.google.com` 和 `https://github.com` 打不开
+
+基本就是 DNS 问题。
+
+**处理：**
+
+1. Hiddify 远程 DNS 改为 `https://1.1.1.1/dns-query`
+2. 关闭安卓 Private DNS（设置 → 网络和互联网 → 私人 DNS → 关闭）
+3. 关闭 Chrome 安全 DNS（Chrome → 设置 → 隐私和安全 → 使用安全 DNS → 关闭）
+4. 必要时临时开启 Hiddify Fake DNS 测试
+5. 清理 Chrome DNS 和 socket 缓存：
+   - `chrome://net-internals/#dns` → Clear host cache
+   - `chrome://net-internals/#sockets` → Flush socket pools
+   - 彻底关闭 Chrome 再重新打开
+
+---
+
+### 状况 8：国内 App 部分功能异常（如抖音评论刷不出）
+
+**原因：** 抖音等国内 App 的视频 CDN 和评论/账号/风控接口不是同一套链路。视频能刷，不代表评论接口正常。这些接口对 DNS、地区、TUN、IPv6、QUIC 更敏感。
+
+**处理：**
+
+```text
+Hiddify → 分应用代理 / Per-App Proxy → 把该 App 加入绕过 / Bypass / Exclude
+```
+
+**建议加入绕过的国内 App：**
+抖音、微信、支付宝、淘宝、京东、拼多多、高德地图、百度地图、银行类 App、政务类 App、国内视频 App
+
+**建议走代理的外网 App：**
+Chrome、ChatGPT、Claude、Google Play、GitHub、Gmail、YouTube、Telegram
+
+---
+
+### 状况 9：电脑端可用，但手机端不可用
+
+**原因：** 电脑端 Clash Verge 可用只能说明：
+- VPS 服务端正常
+- Reality 参数大概率正常
+- 上游 SOCKS5 正常
+
+但手机端还涉及额外变量：
+- 安卓 VPN 权限
+- Hiddify TUN 接管
+- Private DNS
+- 分应用代理
+- IPv6
+- QUIC/UDP
+- 手机蜂窝网络到 VPS 的链路
+
+**排查：** 按手机端调试顺序逐层排查（状况 6 → 7 → 8），不要一上来就改 UUID、Short ID 或 Reality 参数。
+
 ## 常见误解和坑
 
 | 现象 | 误解 | 真相 |
@@ -209,6 +294,10 @@ ipconfig /flushdns
 | Cloudflare speedtest 显示 60% 丢包 | 网络真的丢包 | UDP 测丢包，Clash 关了 UDP，用 fast.com 测 |
 | Reality 日志里有大量 invalid connection | 服务异常 | GFW 主动探测被拦截，越多越说明伪装有效 |
 | 切换 IP 后只有 ChatGPT 打不开 | 节点被封了 | Chrome 缓存了旧连接的 TLS/HSTS/socket 状态，按状况 4b 清理即可 |
+| Hiddify 显示"已连接" | 代理一定正常 | 可能只是节点连通，TUN/VPN 权限异常时系统流量未被接管 |
+| IP 能打开但域名打不开 | 节点参数错了 | 代理链路通，优先查 DNS（远程 DNS、Private DNS、Chrome DNS） |
+| 电脑端能用手机端不能用 | 手机配置错了 | 手机端多了 VPN、TUN、Private DNS、IPv6、蜂窝网络等变量，需单独排查 |
+| 抖音视频能刷但评论刷不出 | 网速慢 | 部分接口不适合走代理，用分应用绕过即可 |
 | tar 提示 "Removing leading /" | 备份出错 | 正常行为，tar 把绝对路径转相对路径 |
 | PowerShell 里 curl 报错 | curl 不可用 | 要用 curl.exe（加.exe）才是真正的 curl |
 | fail2ban status 报 socket 错误 | 服务异常 | 服务刚启动还没就绪，等 2-3 秒再查 |
